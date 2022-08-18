@@ -1,3 +1,4 @@
+#include <mos6522.h>
 #include <mc6809.h>
 #include <raylib.h>
 #include <stdint.h>
@@ -11,6 +12,9 @@ uint8_t *buffer_page; // 16 bytes, but higher 4 bits are unwritable, also cannot
 uint8_t *buffer_ram; // 128 KiB
 uint8_t *buffer_rom; // 2 KiB
 
+mos6522_t via;
+mc6809__t cpu;
+
 uint8_t sg_read(mc6809__t *cpu, uint16_t addr, _Bool ifetch) {
   if (addr >= 0xE000) {
     addr |= 0x1000;
@@ -20,7 +24,11 @@ uint8_t sg_read(mc6809__t *cpu, uint16_t addr, _Bool ifetch) {
     } else if (addr >= 0xF400) {
       return 0x00; // we cannot read the page table in real hardware lol
     } else if (addr >= 0xF000) {
-      return 0x00; // TODO: I/O
+      if (addr & 0x0010) {
+        return 0x00; // TODO: SN76489
+      } else {
+        return mos6522_read(&via, addr & 0x000F);
+      }
     }
   }
   
@@ -37,7 +45,11 @@ void sg_write(mc6809__t *cpu, uint16_t addr, uint8_t data) {
     } else if (addr >= 0xF400) {
       buffer_page[addr & 0x000F] = (data & 0x0F);
     } else if (addr >= 0xF000) {
-      return; // TODO: I/O
+      if (addr & 0x0010) {
+        return; // TODO: SN76489
+      } else {
+        mos6522_write(&via, addr & 0x000F, data);
+      }
     }
   }
   
@@ -79,14 +91,17 @@ int main(int argc, const char **argv) {
     printf("warning: reset vector is outside rom\n");
   }
   
-  mc6809__t cpu;
-  
   cpu.read = sg_read;
   cpu.write = sg_write;
   
+  mos6522_reset(&via);
   mc6809_reset(&cpu);
   
-  InitWindow(192 * SCALE_X, 216 * SCALE_Y, "sgemul");
+  int blob_size = (192 * SCALE_X) / 16;
+  
+  InitWindow(192 * SCALE_X, 216 * SCALE_Y + 1 * blob_size, "sgemul");
+  
+  int cycles = 0;
   
   while (!WindowShouldClose()) {
     BeginDrawing();
@@ -111,11 +126,28 @@ int main(int argc, const char **argv) {
       }
     }
     
+    for (int i = 0; i < 8; i++) {
+      Color final_color;
+      
+      if ((via.orb >> (7 - i)) & 1) final_color = RED;
+      else final_color = BLACK;
+      
+      DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+      
+      if ((via.ora >> (7 - i)) & 1) final_color = RED;
+      else final_color = BLACK;
+      
+      DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+    }
+    
     DrawFPS(10, 10);
     EndDrawing();
     
     for (int i = 0; i < 1000000 * GetFrameTime(); i++) {
-      mc6809_step(&cpu);
+      if (mos6522_tick(&via)) cpu.firq = 1;
+      if (cpu.cycles <= cycles) mc6809_step(&cpu);
+      
+      cycles++;
     }
   }
   
