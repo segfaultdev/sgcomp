@@ -76,7 +76,7 @@ print_char:
   sta 0x00C0, y
   lda 4, x
   sta 0x0100, y
-  lda #0x00
+  lda 5, x
   sta 0x0140, y
   lda cursor_x
   inca
