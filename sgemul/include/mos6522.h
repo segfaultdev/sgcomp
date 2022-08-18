@@ -8,6 +8,13 @@ typedef struct mos6522_t mos6522_t;
 struct mos6522_t {
   uint8_t ddra, ora, ira;
   uint8_t ddrb, orb, irb;
+  
+  uint16_t t1_count, t1_latch;
+  
+  uint16_t t2_count;
+  uint8_t t2_latch;
+  
+  uint8_t acr, pcr, ifr, ier;
 };
 
 void mos6522_reset(mos6522_t *via);

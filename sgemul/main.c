@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define SCALE_X 4
-#define SCALE_Y 3
+#define SCALE_X     4
+#define SCALE_Y     3
 
 uint8_t *buffer_page; // 16 bytes, but higher 4 bits are unwritable, also cannot read ):
 uint8_t *buffer_ram; // 128 KiB
@@ -99,7 +99,7 @@ int main(int argc, const char **argv) {
   
   int blob_size = (192 * SCALE_X) / 16;
   
-  InitWindow(192 * SCALE_X, 216 * SCALE_Y + 2 * blob_size, "sgemul");
+  InitWindow(192 * SCALE_X, 216 * SCALE_Y + blob_size, "sgemul");
   
   int cycles = 0;
   
@@ -128,42 +128,41 @@ int main(int argc, const char **argv) {
     
     for (int i = 0; i < 8; i++) {
       Color final_color;
+      int in_y_bounds = (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() >= 216 * SCALE_Y && GetMouseY() < 216 * SCALE_Y + blob_size);
       
-      if ((via.orb >> (7 - i)) & 1) final_color = RED;
-      else final_color = BLACK;
+      if ((via.ddrb >> (7 - i)) & 1) {
+        if ((via.orb >> (7 - i)) & 1) final_color = ORANGE;
+        else final_color = BROWN;
+        
+        DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+      } else {
+        if ((via.irb >> (7 - i)) & 1) final_color = GREEN;
+        else final_color = DARKGREEN;
+        
+        DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+        if (in_y_bounds && GetMouseX() >= (i + 0) * blob_size && GetMouseX() < (i + 1) * blob_size) via.irb ^= (1 << (7 - i));
+      }
       
-      DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
-      
-      if ((via.ora >> (7 - i)) & 1) final_color = RED;
-      else final_color = BLACK;
-      
-      DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
-      
-      if ((via.irb >> (7 - i)) & 1) final_color = GREEN;
-      else final_color = BLACK;
-      
-      DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y + blob_size, blob_size, blob_size, final_color);
-      
-      if ((via.ira >> (7 - i)) & 1) final_color = GREEN;
-      else final_color = BLACK;
-      
-      DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y + blob_size, blob_size, blob_size, final_color);
-      
-      if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() >= 216 * SCALE_Y + blob_size && GetMouseY() < 216 * SCALE_Y + 2 * blob_size) {
-        if (GetMouseX() >= (i + 0) * blob_size && GetMouseX() < (i + 1) * blob_size) {
-          via.irb ^= (1 << (7 - i));
-        } else if (GetMouseX() >= (i + 8) * blob_size && GetMouseX() < (i + 9) * blob_size) {
-          via.ira ^= (1 << (7 - i));
-        }
+      if ((via.ddra >> (7 - i)) & 1) {
+        if ((via.ora >> (7 - i)) & 1) final_color = ORANGE;
+        else final_color = BROWN;
+        
+        DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+      } else {
+        if ((via.ira >> (7 - i)) & 1) final_color = GREEN;
+        else final_color = DARKGREEN;
+        
+        DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+        if (in_y_bounds && GetMouseX() >= (i + 8) * blob_size && GetMouseX() < (i + 9) * blob_size) via.ira ^= (1 << (7 - i));
       }
     }
     
-    DrawFPS(10, 10);
+    DrawFPS(6, 216 * SCALE_Y - 20);
     EndDrawing();
     
     for (int i = 0; i < 1000000 * GetFrameTime(); i++) {
       if (mos6522_tick(&via)) cpu.firq = 1;
-      if (cpu.cycles <= cycles) mc6809_step(&cpu);
+      if (cpu.cycles <= cycles || cpu.irq || cpu.firq || cpu.nmi) mc6809_step(&cpu);
       
       cycles++;
     }
