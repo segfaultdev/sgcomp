@@ -99,7 +99,7 @@ int main(int argc, const char **argv) {
   
   int blob_size = (192 * SCALE_X) / 16;
   
-  InitWindow(192 * SCALE_X, 216 * SCALE_Y + 1 * blob_size, "sgemul");
+  InitWindow(192 * SCALE_X, 216 * SCALE_Y + 2 * blob_size, "sgemul");
   
   int cycles = 0;
   
@@ -138,6 +138,24 @@ int main(int argc, const char **argv) {
       else final_color = BLACK;
       
       DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
+      
+      if ((via.irb >> (7 - i)) & 1) final_color = GREEN;
+      else final_color = BLACK;
+      
+      DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y + blob_size, blob_size, blob_size, final_color);
+      
+      if ((via.ira >> (7 - i)) & 1) final_color = GREEN;
+      else final_color = BLACK;
+      
+      DrawRectangle((i + 8) * blob_size, 216 * SCALE_Y + blob_size, blob_size, blob_size, final_color);
+      
+      if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() >= 216 * SCALE_Y + blob_size && GetMouseY() < 216 * SCALE_Y + 2 * blob_size) {
+        if (GetMouseX() >= (i + 0) * blob_size && GetMouseX() < (i + 1) * blob_size) {
+          via.irb ^= (1 << (7 - i));
+        } else if (GetMouseX() >= (i + 8) * blob_size && GetMouseX() < (i + 9) * blob_size) {
+          via.ira ^= (1 << (7 - i));
+        }
+      }
     }
     
     DrawFPS(10, 10);
