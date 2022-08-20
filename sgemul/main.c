@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define SCALE_X     4
-#define SCALE_Y     3
+#define SCALE_X 4
+#define SCALE_Y 3
 
 uint8_t *buffer_page; // 16 bytes, but higher 4 bits are unwritable, also cannot read ):
 uint8_t *buffer_ram; // 128 KiB
@@ -101,7 +101,28 @@ int main(int argc, const char **argv) {
   
   InitWindow(192 * SCALE_X, 216 * SCALE_Y + blob_size, "sgemul");
   
+  int ps2_cycle = 0;
   int cycles = 0;
+  
+  uint16_t ps2_queue[16];
+  int ps2_reader = 0, ps2_offset = 0;
+  
+  uint16_t ps2_data = 0;
+  int ps2_left = 0;
+  
+  #define ps2_send(scan) do { \
+    ps2_queue[ps2_offset++] = scan; \
+    ps2_offset %= 16; \
+  } while (0)
+  
+  #define ps2_press(scan) do { \
+    ps2_send(scan); \
+  } while (0)
+  
+  #define ps2_release(scan) do { \
+    ps2_send(0xF0); \
+    ps2_send(scan); \
+  } while (0)
   
   while (!WindowShouldClose()) {
     BeginDrawing();
@@ -140,7 +161,10 @@ int main(int argc, const char **argv) {
         else final_color = DARKGREEN;
         
         DrawRectangle((i + 0) * blob_size, 216 * SCALE_Y, blob_size, blob_size, final_color);
-        if (in_y_bounds && GetMouseX() >= (i + 0) * blob_size && GetMouseX() < (i + 1) * blob_size) via.irb ^= (1 << (7 - i));
+        
+        if (in_y_bounds && GetMouseX() >= (i + 0) * blob_size && GetMouseX() < (i + 1) * blob_size) {
+          mos6522_input(&via, 10 + (7 - i), 1 - ((via.irb >> (7 - i)) & 1));
+        }
       }
       
       if ((via.ddra >> (7 - i)) & 1) {
@@ -160,7 +184,40 @@ int main(int argc, const char **argv) {
     DrawFPS(6, 216 * SCALE_Y - 20);
     EndDrawing();
     
+    for (;;) {
+      int key = GetCharPressed();
+      if (!key) break;
+      
+      ps2_press(key);
+      ps2_release(key);
+    }
+    
     for (int i = 0; i < 1000000 * GetFrameTime(); i++) {
+      if (!ps2_left && ps2_reader != ps2_offset) {
+        uint8_t data = ps2_queue[ps2_reader++];
+        uint8_t parity = ((1 ^ (data >> 0) ^ (data >> 1) ^ (data >> 2) ^ (data >> 3) ^ (data >> 4) ^ (data >> 5) ^ (data >> 6) ^ (data >> 7)) & 1);
+        
+        ps2_data = ((uint16_t)(data) << 1) | ((uint16_t)(parity) << 9) | 0b0000010000000000;
+        ps2_reader %= 16;
+        
+        ps2_cycle = cycles;
+        ps2_left = 11;
+      }
+      
+      if (ps2_left && (cycles - ps2_cycle) >= 1000000 && ((cycles - ps2_cycle) - 2000) % 59 == 0) {
+        mos6522_input(&via, 10 + 6, 0);
+        mos6522_input(&via, 18 + 1, ps2_data & 1);
+        mos6522_input(&via, 18 + 0, 0);
+        
+        printf("%d\n", ps2_left);
+        
+        ps2_data >>= 1;
+        ps2_left--;
+      } else {
+        mos6522_input(&via, 10 + 6, 1);
+        mos6522_input(&via, 18 + 0, 1);
+      }
+      
       if (mos6522_tick(&via)) cpu.firq = 1;
       if (cpu.cycles <= cycles || cpu.irq || cpu.firq || cpu.nmi) mc6809_step(&cpu);
       

@@ -4,13 +4,25 @@
 .set cursor_y, 0x4001
 .set back_color, 0x4002
 
-.set reg_orb, 0xF000
-.set reg_ora, 0xF001
-.set reg_ddrb, 0xF002
-.set reg_ddra, 0xF003
+.set ps2_first, 0x4003
+.set ps2_second, 0x4004
+
+.set via_orb, 0xF000
+.set via_ora, 0xF001
+.set via_ddrb, 0xF002
+.set via_ddra, 0xF003
+
+.set via_t2_latch, 0xF008
+.set via_t2_count_low, 0xF008
+.set via_t2_count_high, 0xF009
+
+.set via_sr, 0xF00A
+.set via_acr, 0xF00B
+.set via_ifr, 0xF00D
+.set via_ier, 0xF00E
 
 start:
-  lds #0x5000
+  lds #0x6000
   ldx #0xF400
   ldd #0x0F0E
   std 0, x
@@ -19,36 +31,36 @@ start:
   lda #0x55
   sta back_color
   bsr clear_screen
+  bsr via_init
   ldd #0x0000
   std cursor_x
   ldx #welcome_str
   bsr print_string
-  ldd #0xACD0
-  std reg_ddrb
-  ldd #0xFFFF
-  std reg_orb
-  ldd #0x0001
+  ldd #0x0002
   std cursor_x
-  ldd reg_ddrb
-  cmpd #0xACD0
-  bne via_error
-  ldx #via_success_str
-  bsr print_string
+  lda #0x39
+  bsr print_hex
 .0:
-  ldd #0x33AA
-  std reg_orb
+  ldd cursor_x
+  pshs a, b
+  ldd #0x2F23
+  std cursor_x
+  lda #'#'
+  bsr print_char
+  puls a, b
+  std cursor_x
   lda #50
   bsr delay_cents
-  ldd #0xCC55
-  std reg_orb
+  ldd cursor_x
+  pshs a, b
+  ldd #0x2F23
+  std cursor_x
+  lda #'_'
+  bsr print_char
+  puls a, b
+  std cursor_x
   lda #50
   bsr delay_cents
-  bra .0
-
-via_error:
-  ldx #via_error_str
-  bsr print_string
-.0:
   bra .0
 
 ; a: cents of a second to wait for
@@ -138,23 +150,97 @@ print_string:
 .0:
   rts
 
+print_hex:
+  pshs b
+  tfr a, b
+  andb #0x0F
+  lsra
+  lsra
+  lsra
+  lsra
+  adda #'0'
+  cmpa #':'
+  blo .0
+  adda #('A' - ':')
+.0:
+  pshs b
+  bsr print_char
+  puls a
+  adda #'0'
+  cmpa #':'
+  blo .1
+  adda #('A' - ':')
+.1:
+  bsr print_char
+  puls b
+  rts
+
+; initializes the via: set timer 2's counter to 11, clear SR, etc.
+via_init:
+  lda #0b00101100
+  sta via_acr
+  lda #11
+  sta via_t2_latch
+  clra
+  sta via_t2_count_high
+  lda via_sr
+  lda #0b01111111
+  sta via_ier
+  sta via_ifr
+  lda #0b10100100
+  sta via_ier
+  andcc #0b10101111
+  rts
+  
+via_handle:
+  pshs a
+  lda via_ifr
+  bita #0b00000100 ; shift register overflow, means we've read the first 8 bits
+  beq .0
+  lda via_sr
+  sta ps2_first
+  puls a
+  rti
+.0:
+  bita #0b00100000 ; timer 2 interrupt, means we just read the last bit of the 11 total
+  beq .1
+  lda via_sr
+  sta ps2_second
+  lda #11
+  sta via_t2_latch
+  clra
+  sta via_t2_count_high
+  
+  pshs a, b, x, y
+  lda ps2_first
+  bsr print_hex
+  lda #','
+  bsr print_char
+  lda ps2_second
+  bsr print_hex
+  lda #' '
+  bsr print_char
+  puls a, b, x, y
+  
+  puls a
+  rti
+.1:
+  puls a
+  rti ; generic handler in case its not a PS/2 related thing
+
 welcome_str:
   .byte "SGBOOT r01, by segfaultdev", 0x00
-via_success_str:
-  .byte "MOS6522 found!", 0x00
-via_error_str:
-  .byte "MOS6522 not found!", 0x00
 
 font_bin:
   .incbin font.bin
 
 .balign 0xFFF0, 0x00
 
-.2byte 0x0000 ; reserved
-.2byte 0x0000 ; software interrupt 3
-.2byte 0x0000 ; software interrupt 2
-.2byte 0x0000 ; fast interrupt request
-.2byte 0x0000 ; interrupt request
-.2byte 0x0000 ; software interrupt 1
-.2byte 0x0000 ; non-maskable interrupt
-.2byte start  ; reset
+.2byte 0x0000     ; reserved
+.2byte 0x0000     ; software interrupt 3
+.2byte 0x0000     ; software interrupt 2
+.2byte via_handle ; fast interrupt request
+.2byte 0x0000     ; interrupt request
+.2byte 0x0000     ; software interrupt 1
+.2byte 0x0000     ; non-maskable interrupt
+.2byte start      ; reset
