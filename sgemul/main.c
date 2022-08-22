@@ -204,12 +204,10 @@ int main(int argc, const char **argv) {
         ps2_left = 11;
       }
       
-      if (ps2_left && (cycles - ps2_cycle) >= 1000000 && ((cycles - ps2_cycle) - 2000) % 59 == 0) {
+      if (ps2_left && (cycles - ps2_cycle) >= 2173 && ((cycles - ps2_cycle) - 2173) % 59 == 0) {
         mos6522_input(&via, 10 + 6, 0);
         mos6522_input(&via, 18 + 1, ps2_data & 1);
         mos6522_input(&via, 18 + 0, 0);
-        
-        printf("%d\n", ps2_left);
         
         ps2_data >>= 1;
         ps2_left--;

@@ -4,8 +4,9 @@
 .set cursor_y, 0x4001
 .set back_color, 0x4002
 
-.set ps2_first, 0x4003
-.set ps2_second, 0x4004
+.set ps2_temp, 0x4003
+.set ps2_stack, 0x4004
+.set ps2_state, 0x4006
 
 .set via_orb, 0xF000
 .set via_ora, 0xF001
@@ -23,11 +24,14 @@
 
 start:
   lds #0x6000
-  ldx #0xF400
   ldd #0x0F0E
-  std 0, x
+  std 0xF400
   ldd #0x0D0C
-  std 2, x
+  std 0xF402
+  ldd #0x5800
+  std ps2_stack
+  lda #0b00000001
+  sta ps2_state
   lda #0x55
   sta back_color
   bsr clear_screen
@@ -38,29 +42,13 @@ start:
   bsr print_string
   ldd #0x0002
   std cursor_x
-  lda #0x39
-  bsr print_hex
 .0:
-  ldd cursor_x
-  pshs a, b
-  ldd #0x2F23
-  std cursor_x
-  lda #'#'
+  ldu ps2_stack
+  cmpu #0x5800
+  beq .0
+  pulu a
+  stu ps2_stack
   bsr print_char
-  puls a, b
-  std cursor_x
-  lda #50
-  bsr delay_cents
-  ldd cursor_x
-  pshs a, b
-  ldd #0x2F23
-  std cursor_x
-  lda #'_'
-  bsr print_char
-  puls a, b
-  std cursor_x
-  lda #50
-  bsr delay_cents
   bra .0
 
 ; a: cents of a second to wait for
@@ -175,6 +163,70 @@ print_hex:
   puls b
   rts
 
+; a: byte to flip (ps.: hi bitflip!)
+bit_flip:
+  pshs b
+  ldb #0x00
+  bita #0b00000001
+  beq .0
+  orb #0b10000000
+.0:
+  bita #0b00000010
+  beq .1
+  orb #0b01000000
+.1:
+  bita #0b00000100
+  beq .2
+  orb #0b00100000
+.2:
+  bita #0b00001000
+  beq .3
+  orb #0b00010000
+.3:
+  bita #0b00010000
+  beq .4
+  orb #0b00001000
+.4:
+  bita #0b00100000
+  beq .5
+  orb #0b00000100
+.5:
+  bita #0b01000000
+  beq .6
+  orb #0b00000010
+.6:
+  bita #0b10000000
+  beq .7
+  orb #0b00000001
+.7:
+  tfr b, a
+  puls b
+  rts
+
+; a: new scancode
+ps2_update:
+  pshs b, u
+  cmpa #0xF0
+  beq .1
+  ; TODO: perform scancode translation, though not needed for the emulator *as of now*
+  ldb ps2_state
+  bitb #0b00000001
+  beq .0
+  ldu ps2_stack
+  pshu a
+  stu ps2_stack
+.0:
+  lda #0b00000001
+  sta ps2_state
+  bra .2
+.1:
+  lda ps2_state
+  anda #0b11111110
+  sta ps2_state
+.2:
+  puls b, u
+  rts
+
 ; initializes the via: set timer 2's counter to 11, clear SR, etc.
 via_init:
   lda #0b00101100
@@ -198,30 +250,24 @@ via_handle:
   bita #0b00000100 ; shift register overflow, means we've read the first 8 bits
   beq .0
   lda via_sr
-  sta ps2_first
+  lsla
+  anda #0b11000000
+  sta ps2_temp
   puls a
   rti
 .0:
   bita #0b00100000 ; timer 2 interrupt, means we just read the last bit of the 11 total
   beq .1
   lda via_sr
-  sta ps2_second
+  lsra
+  lsra
+  ora ps2_temp
+  bsr bit_flip
+  bsr ps2_update
   lda #11
   sta via_t2_latch
   clra
   sta via_t2_count_high
-  
-  pshs a, b, x, y
-  lda ps2_first
-  bsr print_hex
-  lda #','
-  bsr print_char
-  lda ps2_second
-  bsr print_hex
-  lda #' '
-  bsr print_char
-  puls a, b, x, y
-  
   puls a
   rti
 .1:
