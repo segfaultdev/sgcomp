@@ -208,6 +208,8 @@ ps2_update:
   pshs b, u
   cmpa #0xF0
   beq .1
+  cmpa #0xE0
+  beq .2
   ; TODO: perform scancode translation, though not needed for the emulator *as of now*
   ldb ps2_state
   bitb #0b00000001
