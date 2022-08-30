@@ -18,18 +18,19 @@
 ; task_init: initialize the task manager, alongside all its 32 wonderful tasks
 ; 
 task_init:
-  pshs b
+  pshs d
   ldd #0x2020
   ldx #(sgboot_task_list + 0x0A)
 .0:
   cmpa #0x00
   beq .1
-  clr 0, x
-  abx ; hey abbix
+  clr 0x00, x
+  abx
   deca
   bra .0
 .1:
-  puls b
+  sta sgboot_syscall_level
+  puls d
   rts
 
 ; task_create: create a task and return its id
@@ -41,14 +42,32 @@ task_create:
   ; TODO
   rts
 
-; task_switch: load the appropiate page map and stack for a given task id
+; task_switch: load the appropiate page map, stack and registers for a given task ID
 ;
-; - a: task id (0-31)
-; returns:
-; - s: new stack (i mean, of course it does)
+; - a: task ID (0-31)
 task_switch:
-  ; TODO
-  ; (we don't expect to return back, duh)
+  ; save new task ID in memory
+  sta sgboot_task_id
+  
+  ; load task ID into d, shift left 5 times and add the starting address of the task list
+  tfr a, b
+  clra
+  lslb
+  lslb
+  lslb
+  lslb
+  adca #0x00
+  lsla
+  lslb
+  adca #0x00
+  addd #sgboot_task_list
+  tfr d, x
+  
+  ; now x contains the proper address we need
+  ; TODO: load the page map and get all swapped pages from the SD card
+  
+  lds 0x08, x
+  puls cc, d, dp, x, y, u, pc ; do the magic return in 6809 assembly
 
 ; task_map: maps a page to a task
 ; 

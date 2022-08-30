@@ -4,9 +4,11 @@
 
 .equ sgcomp_page_table, 0xF400
 
-.equ sgboot_init_stack,   0x0800
-.equ sgboot_task_list,    0x0800
-.equ sgboot_syscall_list, 0x0C00
+.equ sgboot_init_stack,    0x0800
+.equ sgboot_task_list,     0x0800
+.equ sgboot_syscall_list,  0x0C00
+.equ sgboot_task_id,       0x1000
+.equ sgboot_syscall_level, 0x1001
 
 sgboot_entry:
   ; set up a single 8 KiB page at 0x0000, we'll properly set this in a sec
