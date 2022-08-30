@@ -1,5 +1,8 @@
 sgboot stores system data in certain predefined addresses (assuming the system page map is active):
 - 0x0000 - 0x0800 -> sgboot stack
-- 0x0800 - 0x0DFF -> task list (up to 64 tasks, each 24 bytes)
-- 0x0E00 - 0x0FFF -> syscall list
-- 0x0800 - 
+- 0x0800 - 0x0BFF -> task list (up to 32 tasks, each 32 bytes)
+- 0x0C00 - 0x0FFF -> syscall list
+- 0x1000          -> current task ID
+- 0x1001          -> 
+
+the page allocator the task code uses won't make the first 3 pages available
