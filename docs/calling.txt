@@ -2,7 +2,7 @@ sgcomp and all of its subprojects use a custom calling convention, specified her
 - integer arguments are passed in a and b (or, in case of being 16-bit, d)
 - pointer arguments are passed in x and y
 - extra arguments of any kind may use unused arguments of other kinds, or u whenever that's not enough
-- all registers not used as arguments must be preserved by the callee
+- all registers not used as return values must be preserved by the callee
 - return values are passed in a when 8-bit and d when 16-bit
 
 for commenting function declarations in assembly code, follow this structure:

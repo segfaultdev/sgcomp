@@ -18,19 +18,17 @@
 ; task_init: initialize the task manager, alongside all its 32 wonderful tasks
 ; 
 task_init:
-  pshs d
-  ldd #0x2020
-  ldx #(sgboot_task_list + 0x0A)
+  pshs x
+  ldx #sgboot_task_list
 .0:
-  cmpa #0x00
-  beq .1
-  clr 0x00, x
-  abx
-  deca
+  cmpx #0x0C00
+  bhs .1
+  clr 0x0A, x
+  leax 0x20, x
   bra .0
 .1:
-  sta sgboot_syscall_level
-  puls d
+  clr sgboot_syscall_level
+  puls x
   rts
 
 ; task_create: create a task and return its id
@@ -39,7 +37,50 @@ task_init:
 ; returns:
 ; - a: task id (0-31)
 task_create:
-  ; TODO
+  pshs b, x, y
+  
+  ; weird satanic magic to find a free task
+  pshs x
+  ldx #sgboot_task_list
+  clra
+.0:
+  ldb 0x0A, x
+  bitb 0b00000001
+  beq .1
+  inca
+  leax 0x20, x
+  bra .0
+.1:
+  incb
+  stb 0x0A, x
+  
+  ; set the task pointer to 0x0800!
+  ldb #0x08
+  stb 0x08, x
+  clr 0x09, x
+  
+  ; can't wait until someone optimizes this 8-byte copy to use less bytes, yay!
+  puls y
+  ldu , y++
+  stu , x++
+  ldu , y++
+  stu , x++
+  ldu , y++
+  stu , x++
+  ldu , y++
+  stu , x++
+  
+  ; oh god, please forgive me
+  clr 0x03, x
+  clr 0x06, x
+  clr 0x09, x
+  clr 0x0C, x
+  clr 0x0F, x
+  clr 0x12, x
+  clr 0x15, x
+  
+  ; restore all the registers :p
+  puls b, x, y
   rts
 
 ; task_switch: load the appropiate page map, stack and registers for a given task ID
@@ -75,9 +116,54 @@ task_switch:
 ; - a (bit 5-7): virtual address / 8192
 ; - b (bit 0): 1 if allocated (will ignore physical address then)
 ; - b (bit 1): 1 if swappable (bit 1 has to be 1)
+; - b (bit 2-3): MUST be clear
 ; - b (bit 4-7): physical address / 8192
 task_map:
-  ; TODO
+  pshs d, x
+  pshs d
+  
+  ; load task ID into d, shift left 5 times and add the starting address of the task list
+  tfr a, b
+  clra
+  lslb
+  lslb
+  lslb
+  lslb
+  adca #0x00
+  lsla
+  lslb
+  adca #0x00
+  addd #(sgboot_task_list + 11)
+  tfr d, x
+  
+  ; pop old a into b, to get the virtual address and add it as an offset to x
+  puls b
+  lsrb
+  lsrb
+  lsrb
+  lsrb
+  lsrb
+  lda #0x03
+  mul
+  abx
+  
+  ; pop old b into b, to actually write the contents to its right place
+  puls b
+  tfr b, a
+  lsrb
+  lsrb
+  lsrb
+  lsrb
+  anda #0x0F
+  sta , x+
+  
+  ; TODO: if "is allocated" is set, load b with the first free page found right here
+  
+  clra
+  std 0x00, x
+  
+  ; restore all the registers!
+  puls d, x
   rts
 
 task_unmap:

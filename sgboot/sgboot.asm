@@ -10,6 +10,10 @@
 .equ sgboot_task_id,       0x1000
 .equ sgboot_syscall_level, 0x1001
 
+.macro ldd_task_map task_id, is_allocated, is_swappable, virtual, physical=0x00000
+  ldd #((\task_id * 256) | (\virtual & 0xE000) | \is_allocated | (\is_swappable * 2) | ((\physical & 0x1E000) / 512))
+.endm
+
 sgboot_entry:
   ; set up a single 8 KiB page at 0x0000, we'll properly set this in a sec
   lda #0x0D
@@ -24,11 +28,16 @@ sgboot_entry:
   ; make a task for the kernel, using the third page as before
   ldx #sgboot_task_name
   bsr task_create
-  ldb #0b00100000
+  
+  ldd_task_map 0x00, 0, 0, 0x0000, 0x04000
   bsr task_map
-  ldu (sgboot_task_list + 0x08)
+  ldd_task_map 0x00, 0, 0, 0xA000, 0x00000
+  bsr task_map
+  ldd_task_map 0x00, 0, 0, 0xC000, 0x02000
+  bsr task_map
   
   ; fill the task stack with all the cute stuff we want
+  ldu (sgboot_task_list + 0x08)
   ldx #sgboot_task
   pshu x
   ldx #0x0000
@@ -38,11 +47,16 @@ sgboot_entry:
   pshu x
   pshu x
   
+  ; save the new stack pointer
+  stu (sgboot_task_list + 0x08)
+  
   ; finally, jump to the newly created task
   clra
   bra task_switch
 
 sgboot_task:
+  
+  
   ; initialize the timer (don't worry, the timer won't switch tasks as long as we are in task 0)
   bsr timer_init
   
@@ -54,7 +68,6 @@ sgboot_task:
   ; (ok let's say the task ID is in a)
   ; switch to the init task, starting schedy too!
   bra task_switch
-
 
 sgboot_task_name:
   .byte "(sgboot)"
