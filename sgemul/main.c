@@ -57,6 +57,50 @@ void sg_write(mc6809__t *cpu, uint16_t addr, uint8_t data) {
   buffer_ram[(addr & 0x01FFF) + (real_page << 13)] = data;
 }
 
+void sg_fault(mc6809__t *cpu, mc6809fault__t fault) {
+  if (fault == MC6809_FAULT_INTERNAL_ERROR) {
+    printf("sgemul: Internal error!\n\n");
+  } else if (fault == MC6809_FAULT_INSTRUCTION) {
+    printf("sgemul: Unknown opcode!\n\n");
+  } else if (fault == MC6809_FAULT_ADDRESS_MODE) {
+    printf("sgemul: Invalid address mode!\n\n");
+  } else if (fault == MC6809_FAULT_EXG) {
+    printf("sgemul: Invalid EXG operand!\n\n");
+  } else if (fault == MC6809_FAULT_TFR) {
+    printf("sgemul: Invalid TFR operand!\n\n");
+  } else if (fault == MC6809_FAULT_user) {
+    printf("sgemul: Breakpoint!\n\n");
+  }
+  
+  printf("PC=0x%04X, D=0x%04X, X=0x%04X, Y=0x%04X, S=0x%04X, U=0x%04X\n\n", cpu->pc, cpu->d.w, cpu->X, cpu->Y, cpu->S, cpu->U);
+  
+  printf("S stack: ");
+  
+  for (int i = 0; i < 32; i++) {
+    uint8_t byte = sg_read(cpu, cpu->S.w + i, 0);
+    printf("%02X", byte);
+  }
+  
+  printf("\nU stack: ");
+  
+  for (int i = 0; i < 32; i++) {
+    uint8_t byte = sg_read(cpu, cpu->U.w + i, 0);
+    printf("%02X", byte);
+  }
+  
+  printf("\n\n");
+  
+  printf("Page table:\n");
+  
+  for (int i = 0; i < 7; i++) {
+    printf("- 0x%04X -> 0x%05X\n", i * 0x2000, ((buffer_page[i] & 0x0F) ^ 0x0F) * 0x2000);
+  }
+  
+  if (fault != MC6809_FAULT_user) {
+    exit(1);
+  }
+}
+
 int main(int argc, const char **argv) {
   if (argc < 2) {
     printf("usage: %s <ROM>\n", argv[0]);
@@ -93,12 +137,14 @@ int main(int argc, const char **argv) {
   
   cpu.read = sg_read;
   cpu.write = sg_write;
+  cpu.fault = sg_fault;
   
   mos6522_reset(&via);
   mc6809_reset(&cpu);
   
   int blob_size = (192 * SCALE_X) / 16;
   
+  SetTraceLogLevel(LOG_NONE);
   InitWindow(192 * SCALE_X, 216 * SCALE_Y + blob_size, "sgemul");
   
   int ps2_cycle = 0;

@@ -24,6 +24,8 @@
 
 #include <mc6809.h>
 
+/* edited by segfaultdev to add sgcomp breakpoint stuff! */
+
 /**************************************************************************/
 
 static int              page2           (mc6809__t *) __attribute__((nonnull));
@@ -532,6 +534,10 @@ int mc6809_step(mc6809__t *cpu)
              default:
                   (*cpu->fault)(cpu,MC6809_FAULT_EXG);
                   return 0;
+           }
+           
+           if (src == &cpu->B && dest == &cpu->B) {
+             (*cpu->fault)(cpu,MC6809_FAULT_user);
            }
            
            tmp   = *src;
